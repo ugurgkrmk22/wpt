@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<link rel=author href="mailto:jarhar@chromium.org">
+<link rel=author href="mailto:falken@chromium.org">
+<link rel=help href="https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element">
+<link rel=help href="https://bugs.chromium.org/p/chromium/issues/detail?id=329407">
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+
+<!--
+To test manually, click the left box. There should be no change. Then click the
+right box. If both boxes turn green, the test passes.
+-->
+
+<style>
+#ancestor {
+  position: absolute;
+  height: 50px;
+  width: 50px;
+  top: 200px;
+  left: 100px;
+  border: 1px solid;
+}
+
+dialog {
+  height: 50px;
+  width: 50px;
+  top: 200px;
+  left: 200px;
+  margin: 0;
+}
+
+dialog::backdrop {
+  display: none;
+}
+</style>
+
+<div id="ancestor">
+  <dialog></dialog>
+</div>
+
+<script>
+promise_test(async () => {
+  async function clickOn(element) {
+    const rect = element.getBoundingClientRect();
+    const actions = new test_driver.Actions()
+      .pointerMove(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      .pointerDown()
+      .pointerUp();
+    await actions.send();
+  }
+
+  // For manual testing, indicate success only if automatic testing would also
+  // print success for all ancestor nodes.
+  function turnDivGreenOnSuccess() {
+    if (handledEvent['document'] && handledEvent['body'] && handledEvent['div'])
+      div.style.backgroundColor = 'green';
+  }
+
+  const div = document.querySelector('#ancestor');
+  const dialog = document.querySelector('dialog');
+  dialog.showModal();
+
+  const handledEvent = {};
+  document.addEventListener('click', function(event) {
+    handledEvent['document'] = true;
+    turnDivGreenOnSuccess();
+  });
+
+  document.body.addEventListener('click', function(event) {
+    handledEvent['body'] = true;
+    turnDivGreenOnSuccess();
+    // body should get a event only via bubbling.
+    if (event.target != dialog) {
+      assert_unreached('body was targeted for an click event');
+      div.style.backgroundColor = 'red';
+    }
+  });
+
+  div.addEventListener('click', function(event) {
+    handledEvent['div'] = true;
+    turnDivGreenOnSuccess();
+    // div should get a event only via bubbling.
+    if (event.target != dialog) {
+      assert_unreached('div was targeted for an click event');
+      div.style.backgroundColor = 'red';
+    }
+  });
+
+  dialog.addEventListener('click', function(event) {
+    handledEvent['dialog'] = true;
+    dialog.style.backgroundColor = 'green';
+    if (event.target != dialog) {
+      assert_unreached('dialog was not targeted for a click event');
+      dialog.style.backgroundColor = 'red';
+    }
+  });
+
+  const nodes = [ 'document', 'body', 'div', 'dialog' ];
+  nodes.map(function(node) { handledEvent[node] = false; });
+  await clickOn(div);
+  assert_true(handledEvent.document, 'Clicking on ancestor.');
+  assert_false(handledEvent.body, 'Clicking on ancestor.');
+  assert_false(handledEvent.dialog, 'Clicking on ancestor.');
+  assert_false(handledEvent.div, 'Clicking on ancestor.');
+  handledEvent.document = false;
+
+  await clickOn(dialog);
+  assert_true(handledEvent.document, 'Clicking on dialog.');
+  assert_true(handledEvent.body, 'Clicking on dialog.');
+  assert_true(handledEvent.dialog, 'Clicking on dialog.');
+  assert_true(handledEvent.div, 'Clicking on dialog.');
+}, 'Test that ancestors of modal dialog are inert.');
+</script>
